@@ -2,7 +2,7 @@ import pandas as pd
 import pyvista as pv
 import numpy as np
 
-dados = pd.read_csv("pontos.csv")
+dados = pd.read_csv("segmentos.csv")
 
 points = []
 point_map = {}
