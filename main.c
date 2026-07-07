@@ -3,6 +3,10 @@
 #include <time.h>
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define EPSILON 0.05 // Distância mínima recomendada para restrição geométrica
 
 typedef struct {
@@ -169,8 +173,9 @@ int pontoDentroDominio(Point p, double R) {
     return (p.x*p.x + p.y*p.y) <= R*R;
 }
 
-int candidatoValido(Arvore *T, Segment novo, double distanciaMinima) {
+int candidatoValido(Arvore *T, Segment novo, double distanciaMinima, int indiceExcluir) {
     for (int i = 0; i < T->nSegmentos; i++) {
+        if (i == indiceExcluir) continue;
         if (segmentosSeInterceptam(novo, T->segmentos[i])) return 0;
         if (distanciaSegmentos(novo, T->segmentos[i]) < distanciaMinima) return 0;
     }
@@ -229,9 +234,10 @@ void salvarSegmentosCSV(Segment *segmentos, int n) {
 }
 
 int main(int argc, char *argv[]) {
+    printf("Entrou no main\n");
     if(argc != 3){
-    printf("Numero de argumentos invalidos. Tente Novamente");
-    return 1;
+        printf("Numero de argumentos invalidos. Tente Novamente");
+        return 1;
     }
 
     int Nterm = atoi(argv[1]);
@@ -241,9 +247,10 @@ int main(int argc, char *argv[]) {
 
     Arvore *T = criarArvore(2 * Nterm + 2);
 
-    // 1. Iniciar com o nó raiz no centro (0,0)
-    Point centro = {0.0, 0.0};
-    No *raiz = criarNo(centro, T->nNos);
+    // 1. Iniciar com o nó raiz na borda
+    double anguloRaiz = randomDouble(0, 2 * M_PI);
+    Point pontoBorda = { R * cos(anguloRaiz), R * sin(anguloRaiz) };
+    No *raiz = criarNo(pontoBorda, T->nNos);
     adicionarNo(T, raiz);
 
     // 2. Conectar o primeiro ponto terminal diretamente à raiz para criar o primeiro segmento
@@ -259,6 +266,7 @@ int main(int argc, char *argv[]) {
 
     // 3. Loop de crescimento para os demais pontos terminais
     while (terminaisInseridos < Nterm) {
+        printf("Inserindo terminal %d de %d\n", terminaisInseridos + 1, Nterm);
         Point nt = gerarPonto(R);
 
         int melhorIndice = -1;
@@ -273,7 +281,7 @@ int main(int argc, char *argv[]) {
             No destTemp = { .p = nt };
             Segment candidato = { &origTemp, &destTemp };
 
-            if (pontoDentroDominio(pBif, R) && candidatoValido(T, candidato, EPSILON)) {
+            if (pontoDentroDominio(pBif, R) && candidatoValido(T, candidato, EPSILON, j)) {
                 // Caso básico: Minimizar a distância entre a conexão e o novo terminal
                 double custo = distanciaEuclidiana(pBif, nt);
                 if (custo < menorCusto) {
