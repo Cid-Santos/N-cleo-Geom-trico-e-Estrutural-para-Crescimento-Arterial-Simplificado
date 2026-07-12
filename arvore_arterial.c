@@ -108,24 +108,56 @@ int segmentosSeInterceptam(Segment s1, Segment s2) {
 }
 
 double distanciaPontoSegmento(Point p, Segment s) {
-    double x1 = s.origem->p.x;
-    double y1 = s.origem->p.y;
-    double x2 = s.destino->p.x;
-    double y2 = s.destino->p.y;
 
-    double dx = x2 - x1;
-    double dy = y2 - y1;
+    // (x(j), y(j)) representa a extremidade de destino
+    double x_j = s.destino->p.x;
+    double y_j = s.destino->p.y;
+    
+    // (x(Bj), y(Bj)) representa a extremidade proximal (origem/bifurcação Bj)
+    double x_Bj = s.origem->p.x;
+    double y_Bj = s.origem->p.y;
+    
+    // Ponto prospectivo (x, y)
+    double x = p.x;
+    double y = p.y;
 
-    if (dx*dx + dy*dy == 0) return distanciaEuclidiana(p, s.origem->p);
+    // l(j): Comprimento do segmento j
+    double dx_seg = x_Bj - x_j;
+    double dy_seg = y_Bj - y_j;
+    double l_j = sqrt(dx_seg * dx_seg + dy_seg * dy_seg);
 
-    double t = ((p.x - x1)*dx + (p.y - y1)*dy) / (dx*dx + dy*dy);
-    if (t < 0) t = 0;
-    if (t > 1) t = 1;
+    // Evita divisão por zero caso o segmento seja um ponto degenerado
+    if (l_j == 0.0) {
+        return distanciaEuclidiana(p, s.origem->p);
+    }
 
-    Point proj = { x1 + t*dx, y1 + t*dy };
-    return distanciaEuclidiana(p, proj);
+    // Equação (3): Cálculo de d_proj(x, y, j) usando o produto escalar dos vetores
+    double dot_proj = (dx_seg * (x - x_j)) + (dy_seg * (y - y_j));
+    double d_proj = dot_proj / (l_j * l_j);
+
+    // Verificação de critério: "If 0 <= d_proj <= 1, the projection lies within segment j"
+    if (d_proj >= 0.0 && d_proj <= 1.0) {
+        // Equação (4): Cálculo da distância ortogonal d_ortho(x, y, j)
+        double v1_x = -y_Bj + y_j;
+        double v1_y = x_Bj - x_j;
+        double v2_x = x - x_j;
+        double v2_y = y - y_j;
+        
+        double dot_ortho = (v1_x * v2_x) + (v1_y * v2_y);
+        double d_ortho = fabs(dot_ortho) / l_j; // multiplicado por l(j)^-1 é o mesmo que dividir por l(j)
+        
+        return d_ortho;
+    } 
+    // Caso a projeção caia fora ("close to one of its endpoints"), avalia a distância até a extremidade física mais próxima
+    else if (d_proj < 0.0) {
+        // Mais próximo da extremidade distal (destino)
+        return distanciaEuclidiana(p, s.destino->p);
+    } 
+    else {
+        // Mais próximo da extremidade proximal (origem)
+        return distanciaEuclidiana(p, s.origem->p);
+    }
 }
-
 double distanciaSegmentos(Segment s1, Segment s2) {
     double d1 = distanciaPontoSegmento(s1.origem->p, s2);
     double d2 = distanciaPontoSegmento(s1.destino->p, s2);
