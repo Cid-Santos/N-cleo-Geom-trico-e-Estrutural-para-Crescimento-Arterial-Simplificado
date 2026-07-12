@@ -14,15 +14,18 @@ int main(int argc, char *argv[]) {
     int Nterm = atoi(argv[1]);
     double R = atof(argv[2]);
     
-    srand((unsigned int)time(NULL));
+    // ALTERADO: Semente fixa para garantir reprodutibilidade nos testes
+    srand(42); 
 
     Arvore *T = criarArvore(2 * Nterm + 2);
 
+    // 1. Iniciar com o nó raiz na borda
     double anguloRaiz = randomDouble(0, 2 * M_PI);
     Point pontoBorda = { R * cos(anguloRaiz), R * sin(anguloRaiz) };
     No *raiz = criarNo(pontoBorda, T->nNos);
     adicionarNo(T, raiz);
 
+    // 2. Conectar o primeiro ponto terminal na extremidade oposta da raiz
     Point p1 = { -pontoBorda.x, -pontoBorda.y }; 
     No *primeiroTerm = criarNo(p1, T->nNos);
     adicionarNo(T, primeiroTerm);
