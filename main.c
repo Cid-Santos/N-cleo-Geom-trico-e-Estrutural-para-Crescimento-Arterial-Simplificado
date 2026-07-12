@@ -18,14 +18,12 @@ int main(int argc, char *argv[]) {
 
     Arvore *T = criarArvore(2 * Nterm + 2);
 
-    // 1. Iniciar com o nó raiz na borda
     double anguloRaiz = randomDouble(0, 2 * M_PI);
     Point pontoBorda = { R * cos(anguloRaiz), R * sin(anguloRaiz) };
     No *raiz = criarNo(pontoBorda, T->nNos);
     adicionarNo(T, raiz);
 
-    // 2. Conectar o primeiro ponto terminal diretamente à raiz para criar o primeiro segmento
-    Point p1 = gerarPonto(R);
+    Point p1 = { -pontoBorda.x, -pontoBorda.y }; 
     No *primeiroTerm = criarNo(p1, T->nNos);
     adicionarNo(T, primeiroTerm);
     raiz->esq = primeiroTerm;
