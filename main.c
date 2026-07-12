@@ -15,27 +15,31 @@ int main(int argc, char *argv[]) {
     double gamma = atof(argv[3]);
     int M = atoi(argv[4]);
 
-    double Qperf = 8.33e-6;
-    double mu = 3.6e-3;
+    // Parametros fisicos (enunciado)
+    double Qperf = 8.33e-6;   // m^3/s
+    double mu = 3.6e-3;       // Pa.s
     double Qterm = Qperf / Nterm;
 
-    srand(42); // Semente fixa para testes reproduzíveis
-    clock_t tempoInicio = clock();
+    srand(42);
+    clock_t inicio = clock();
 
-    Arvore *T = criarArvore(2 * Nterm + 5);
+    // Capacidade: cada terminal gera 2 nos (bif + term), mais a raiz e primeiro term
+    Arvore *T = criarArvore(4 * Nterm + 10);
 
-    // 1. Iniciar Nó Raiz na borda externa
-    double anguloRaiz = randomDouble(0, 2 * M_PI);
-    Point pontoBorda = { R * cos(anguloRaiz), R * sin(anguloRaiz) };
-    No *raiz = criarNo(pontoBorda, T->nNos);
+    // ========================================================================
+    // 1. Criar arvore inicial: raiz na borda + primeiro terminal oposto
+    // ========================================================================
+    double angulo = randDouble(0, 2.0 * M_PI);
+    Point pRaiz = { R * cos(angulo), R * sin(angulo) };
+    No *raiz = criarNo(pRaiz, 0);
     adicionarNo(T, raiz);
 
-    // 2. Primeira conexão diametralmente oposta
-    Point p1 = { -pontoBorda.x, -pontoBorda.y };
-    No *primeiroTerm = criarNo(p1, T->nNos);
-    adicionarNo(T, primeiroTerm);
-    raiz->esq = primeiroTerm;
-    primeiroTerm->pai = raiz;
+    // Primeiro terminal: diametralmente oposto
+    Point pTerm1 = { -pRaiz.x, -pRaiz.y };
+    No *term1 = criarNo(pTerm1, 1);
+    adicionarNo(T, term1);
+    raiz->esq = term1;
+    term1->pai = raiz;
 
     atualizaGeometriaFisica(raiz, Qterm, gamma, mu);
 
@@ -43,90 +47,141 @@ int main(int argc, char *argv[]) {
     int conexoesTestadas = 0;
     int conexoesRejeitadas = 0;
 
-    // 3. Loop de Crescimento Arterial Otimizado
+    printf("MiniCCO-1 iniciado: Nterm=%d, R=%.4f, gamma=%.2f, M=%d\n", Nterm, R, gamma, M);
+    fflush(stdout);
+
+    // ========================================================================
+    // 2. Loop de crescimento
+    // ========================================================================
+    int maxTentativasPorTerminal = 500;
+
     while (terminaisInseridos < Nterm) {
-        Point nt = gerarPonto(R);
-        int melhorSegmentoIndice = -1;
-        Point melhorBifurcacaoX = {0,0};
-        double menorVolumeGlobal = 1e30;
+        int inseriu = 0;
 
-        int limiteSegmentosAtuais = T->nNos;
-        for (int k = 1; k < limiteSegmentosAtuais; k++) {
-            No *B = T->nos[k];
-            conexoesTestadas++;
+        for (int tent = 0; tent < maxTentativasPorTerminal && !inseriu; tent++) {
+            Point nt = gerarPontoDominio(R);
 
-            No *bifTemp = NULL, *termTemp = NULL;
-            realizarConexaoTemporaria(T, B, nt, &bifTemp, &termTemp);
+            int melhorK = -1;
+            Point melhorX = {0, 0};
+            double melhorCusto = 1e30;
 
-            Point A = bifTemp->pai->p;
-            Point OriginalB = B->p;
+            // Testar conexao com cada segmento existente
+            int nNosAntes = T->nNos;
+            for (int k = 1; k < nNosAntes; k++) {
+                No *B = T->nos[k];
+                if (B->pai == NULL) continue;
 
-            // Busca em Grade Baricêntrica
-            for (int i = 0; i <= M; i++) {
-                
-                for (int j = 0; j <= M - i; j++) {
-                    double alpha = i / (double)M;
-                    double beta = j / (double)M;
-                    double lambda = 1.0 - alpha - beta;
+                conexoesTestadas++;
 
-                    Point X = pontoBaricentrico(A, OriginalB, nt, alpha, beta, lambda);
-                    bifTemp->p = X;
+                No *bifTemp = NULL, *termTemp = NULL;
+                realizarConexao(T, B, nt, &bifTemp, &termTemp);
 
-                    atualizaGeometriaFisica(raiz, Qterm, gamma, mu);
+                // Pontos do triangulo para busca baricentrica
+                Point pA = bifTemp->pai->p;  // A (pai da bifurcacao = antigo pai de B)
+                Point pB = B->p;             // B (ponto distal original)
+                Point pC = nt;               // C (novo terminal)
 
-                    if (arvoreValida(T, bifTemp, termTemp)) {
-                        double volCusto = funcaoCustoVolume(raiz);
-                        if (volCusto < menorVolumeGlobal) {
-                            menorVolumeGlobal = volCusto;
-                            melhorSegmentoIndice = k;
-                            melhorBifurcacaoX = X;
+                // Busca em grade baricentrica
+                for (int i = 1; i < M; i++) {
+                    for (int j = 1; j < M - i; j++) {
+                        double alpha = i / (double)M;
+                        double beta  = j / (double)M;
+                        double lambda = 1.0 - alpha - beta;
+
+                        Point X = pontoBaricentrico(pA, pB, pC, alpha, beta, lambda);
+                        bifTemp->p = X;
+
+                        // Recalcular geometria fisica com a nova posicao
+                        atualizaGeometriaFisica(raiz, Qterm, gamma, mu);
+
+                        // Verificar validade geometrica
+                        if (arvoreValida(T, bifTemp, termTemp)) {
+                            double custo = funcaoCustoVolume(raiz);
+                            if (custo < melhorCusto) {
+                                melhorCusto = custo;
+                                melhorK = k;
+                                melhorX = X;
+                            }
                         }
                     }
-                    
                 }
+
+                desfazerConexao(T, B, bifTemp, termTemp);
             }
-            desfazerConexaoTemporaria(T, B, bifTemp, termTemp);
+
+            if (melhorK != -1) {
+                // Aceitar a melhor conexao encontrada
+                No *bifFinal = NULL, *termFinal = NULL;
+                realizarConexao(T, T->nos[melhorK], nt, &bifFinal, &termFinal);
+                bifFinal->p = melhorX;
+                atualizaGeometriaFisica(raiz, Qterm, gamma, mu);
+                terminaisInseridos++;
+                inseriu = 1;
+                printf("  Terminal %d/%d inserido (custo=%.6e)\n",
+                       terminaisInseridos, Nterm, melhorCusto);
+                fflush(stdout);
+            } else {
+                conexoesRejeitadas++;
+            }
         }
 
-        if (melhorSegmentoIndice != -1) {
-            No *bifPermanente = NULL, *termPermanente = NULL;
-            realizarConexaoTemporaria(T, T->nos[melhorSegmentoIndice], nt, &bifPermanente, &termPermanente);
-            bifPermanente->p = melhorBifurcacaoX;
-            atualizaGeometriaFisica(raiz, Qterm, gamma, mu);
-            terminaisInseridos++;
-        } else {
-            conexoesRejeitadas++;
+        if (!inseriu) {
+            printf("AVISO: Nao foi possivel inserir terminal %d apos %d tentativas.\n",
+                   terminaisInseridos + 1, maxTentativasPorTerminal);
+            fflush(stdout);
+            break;
         }
     }
 
-    clock_t tempoFim = clock();
-    double tempoExecucao = (double)(tempoFim - tempoInicio) / CLOCKS_PER_SEC;
+    // ========================================================================
+    // 3. Estatisticas finais
+    // ========================================================================
+    clock_t fim = clock();
+    double tempoExec = (double)(fim - inicio) / CLOCKS_PER_SEC;
 
-    // --- Extração de Estatísticas ---
+    // Recalcular tudo ao final
+    atualizaGeometriaFisica(raiz, Qterm, gamma, mu);
+
+    int nSegmentos = 0;
     int nFolhas = 0;
-    double somaRaios = 0.0;
-    for (int i = 1; i < T->nNos; i++) {
-        somaRaios += T->nos[i]->raio;
-        if (T->nos[i]->esq == NULL && T->nos[i]->dir == NULL) nFolhas++;
-    }
     double comprimentoTotal = 0.0;
-    for (int i = 1; i < T->nNos; i++) comprimentoTotal += T->nos[i]->comprimento;
+    double somaRaios = 0.0;
 
-    printf("\n=================== ESTATÍSTICAS DA ÁRVORE (MINICCO-1) ===================\n");
-    printf("Número total de nós: %d\n", T->nNos);
-    printf("Número total de segmentos: %d\n", T->nNos - 1);
-    printf("Número de terminais (folhas): %d\n", nFolhas);
-    printf("Comprimento total da árvore: %.6lf m\n", comprimentoTotal);
-    printf("Volume intravascular total: %.6e m³\n", funcaoCustoVolume(raiz));
-    printf("Raio da raiz: %.6lf m\n", raiz->esq->raio);
-    printf("Raio médio dos segmentos: %.6lf m\n", somaRaios / (T->nNos - 1));
-    printf("Número de conexões testadas: %d\n", conexoesTestadas);
-    printf("Número de conexões rejeitadas: %d\n", conexoesRejeitadas);
-    printf("Tempo de execução: %.4lf segundos\n", tempoExecucao);
+    for (int i = 0; i < T->nNos; i++) {
+        No *n = T->nos[i];
+        if (n->pai != NULL) {
+            nSegmentos++;
+            comprimentoTotal += n->comprimento;
+            somaRaios += n->raio;
+            if (n->esq == NULL && n->dir == NULL) {
+                nFolhas++;
+            }
+        }
+    }
+
+    double volumeTotal = funcaoCustoVolume(raiz);
+    double raioRaiz = (raiz->esq != NULL) ? raiz->esq->raio : 0.0;
+    double raioMedio = (nSegmentos > 0) ? somaRaios / nSegmentos : 0.0;
+
+    printf("\n=================== ESTATISTICAS DA ARVORE (MINICCO-1) ===================\n");
+    printf("Numero total de nos: %d\n", T->nNos);
+    printf("Numero total de segmentos: %d\n", nSegmentos);
+    printf("Numero de terminais (folhas): %d\n", nFolhas);
+    printf("Comprimento total da arvore: %.6e m\n", comprimentoTotal);
+    printf("Volume intravascular total: %.6e m^3\n", volumeTotal);
+    printf("Raio da raiz: %.6e m\n", raioRaiz);
+    printf("Raio medio dos segmentos: %.6e m\n", raioMedio);
+    printf("Numero de conexoes testadas: %d\n", conexoesTestadas);
+    printf("Numero de conexoes rejeitadas: %d\n", conexoesRejeitadas);
+    printf("Tempo de execucao: %.4f segundos\n", tempoExec);
     printf("=========================================================================\n");
 
-    salvarResultadosCSV(T);
+    // ========================================================================
+    // 4. Salvar CSV
+    // ========================================================================
+    salvarCSV(T);
 
+    // Liberar memoria
     for (int i = 0; i < T->nNos; i++) free(T->nos[i]);
     free(T->nos);
     free(T);

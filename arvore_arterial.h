@@ -1,13 +1,17 @@
 #ifndef ARVORE_ARTERIAL_H
 #define ARVORE_ARTERIAL_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-#define EPSILON 0.00001// Margem de segurança para distância mínima entre vasos
-
-// --- Estruturas de Dados ---
+// ============================================================================
+// Estruturas de Dados
+// ============================================================================
 
 typedef struct {
     double x;
@@ -19,56 +23,70 @@ typedef struct No {
     struct No *dir;
     struct No *pai;
     int id;
-    Point p;                  // Coordenada distal do segmento
-    double raio;              // Raio do segmento
-    double comprimento;       // Comprimento do segmento
-    double fluxo;             // Fluxo no segmento
-    double resistencia;       // Resistência hidráulica
-    double volume;            // Volume intravascular do segmento
-    int qtd_term_distal;      // Quantidade de terminais distais
+    Point p;                  // coordenada distal do segmento
+    double raio;
+    double comprimento;
+    double fluxo;
+    double resistencia;
+    double volume;
+    int qtd_term_distal;
 } No;
 
 typedef No* ptrNo;
 
+// Vetor linear de ponteiros para todos os nos
 typedef struct {
     No **nos;
     int nNos;
-    int capacidadeNos;
+    int capacidade;
 } Arvore;
 
+// Segmento geometrico auxiliar
 typedef struct {
-    Point origen; // Mantido padrão interno para compatibilidade geométrica
-    Point destino;
-} SegGeom;
+    Point a, b;
+} Seg;
 
-// --- Protótipos das Funções ---
+// ============================================================================
+// Prototipos
+// ============================================================================
 
+// Parte A - Comprimento, Resistencia e Volume
 double distancia(Point a, Point b);
 double calculaComprimento(ptrNo seg);
 double calculaResistencia(double mu, double comprimento, double raio);
 double calculaVolume(double comprimento, double raio);
 double calculaVolumeTotal(ptrNo no);
+
+// Parte B - Terminais distais
 int atualizaQtdTerminaisDistais(ptrNo no);
+
+// Parte C - Fluxos
 void atualizaFluxos(ptrNo no, double Qterm);
+
+// Parte D - Raios e geometria fisica
 void atualizaRaiosPorFluxo(ptrNo no, double gamma);
 void atualizaGeometriaFisica(ptrNo raiz, double Qterm, double gamma, double mu);
+
+// Parte E - Funcao custo
 double funcaoCustoVolume(ptrNo raiz);
 
-double randomDouble(double min, double max);
-Point gerarPonto(double raio);
-int segmentosSeInterceptam(SegGeom s1, SegGeom s2);
-double distanciaPontoSegmento(Point p, SegGeom s);
-double distanciaSegmentos(SegGeom s1, SegGeom s2);
-int saoVizinhos(No *n1, No *n2);
-int arvoreValida(Arvore *T, No *bif, No *term);
-
+// Parte F - Otimizacao geometrica
 Point pontoBaricentrico(Point A, Point B, Point C, double alpha, double beta, double lambda);
 
-Arvore *criarArvore(int capacidade);
-No *criarNo(Point p, int id);
-void adicionarNo(Arvore *T, No *n);
-void realizarConexaoTemporaria(Arvore *T, No *B, Point nt, No **bif_out, No **term_out);
-void desfazerConexaoTemporaria(Arvore *T, No *B, No *bif, No *term);
-void salvarResultadosCSV(Arvore *T);
+// Validacao geometrica
+int segmentosSeInterceptam(Seg s1, Seg s2);
+int arvoreValida(Arvore *T, No *bif, No *term);
 
-#endif // ARVORE_ARTERIAL_H
+// Gerenciamento da arvore
+Arvore* criarArvore(int capacidade);
+No* criarNo(Point p, int id);
+void adicionarNo(Arvore *T, No *n);
+void realizarConexao(Arvore *T, No *B, Point nt, No **bif_out, No **term_out);
+void desfazerConexao(Arvore *T, No *B, No *bif, No *term);
+
+// Utilidades
+double randDouble(double min, double max);
+Point gerarPontoDominio(double R);
+void salvarCSV(Arvore *T);
+
+#endif

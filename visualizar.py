@@ -1,82 +1,45 @@
-import pandas as pd
 import pyvista as pv
+import pandas as pd
 import numpy as np
 
-# --- 1. Ajuste do nome do arquivo conforme a especificação do MiniCCO-1 ---
 dados = pd.read_csv("arvore.csv")
 
-points = []
-point_map = {}
-lines = []
-raios_segmentos = [] # Armazenará o raio correspondente a cada linha/segmento
-
-# --- 2. Ajuste dos nomes das colunas (x0, y0, x1, y1) ---
-for _, row in dados.iterrows():
-    p1 = (row["x0"], row["y0"], 0.0) # Extremidade proximal
-    p2 = (row["x1"], row["y1"], 0.0) # Extremidade distal
-    raio = row["raio"]               # Raio físico calculado pelo CCO
-
-    if p1 not in point_map:
-        point_map[p1] = len(points)
-        points.append(p1)
-    if p2 not in point_map:
-        point_map[p2] = len(points)
-        points.append(p2)
-
-    i = point_map[p1]
-    j = point_map[p2]
-    lines.append([2, i, j])
-    raios_segmentos.append(raio)
-
-points = np.array(points)
-
-# --- Localizar a raiz para rotacionar ao topo ---
-raios_centro = np.linalg.norm(points[:, :2], axis=1)
-indice_raiz = np.argmax(raios_centro)          
-R = raios_centro[indice_raiz]                  
-ponto_raiz = points[indice_raiz, :2]
-
-# --- Rotacionar em torno da origem ---
-angulo_atual = np.arctan2(ponto_raiz[1], ponto_raiz[0])
-angulo_alvo = np.pi / 2  
-rot = angulo_alvo - angulo_atual
-
-c, s = np.cos(rot), np.sin(rot)
-R_mat = np.array([[c, -s], [s, c]])
-
-xy_rotacionado = points[:, :2] @ R_mat.T
-points_rot = np.column_stack([xy_rotacionado, np.zeros(len(points))])
-
-# --- 3. Renderização Avançada de Tubos por Segmento (MiniCCO-1) ---
 plotter = pv.Plotter()
+plotter.set_background("white")
 
-# Itera gerando um tubo 3D cilíndrico individualizado para cada segmento respeitando seu raio
-for idx, line_info in enumerate(lines):
-    i, j = line_info[1], line_info[2]
-    p0_rot = points_rot[i]
-    p1_rot = points_rot[j]
-    raio_real = raios_segmentos[idx]
+# Fator de escala para visualizacao dos raios (tubos)
+# Os raios estao em metros (~1e-3), ajustar se necessario
+raio_max = dados["raio"].max()
+escala_tubo = 1.0  # usar 1.0 para raios reais; aumentar se tubos ficarem invisiveis
 
-    # Cria a linha reta geométrica entre os nós rotacionados
-    linha_geom = pv.Line(p0_rot, p1_rot)
-    
-    # Transforma a linha reta em um tubo com o raio exato da escala física
-    tubo = linha_geom.tube(radius=raio_real)
-    
-    # Adiciona ao renderizador
-    plotter.add_mesh(tubo, color="red", smooth_shading=True)
+for _, row in dados.iterrows():
+    p0 = np.array([row["x0"], row["y0"], 0.0])
+    p1 = np.array([row["x1"], row["y1"], 0.0])
 
-# Círculo de referência do Domínio
-theta = np.linspace(0, 2*np.pi, 200)
-circle_pts = np.column_stack([R*np.cos(theta), R*np.sin(theta), np.zeros_like(theta)])
-circle = pv.PolyData(circle_pts)
-circle.lines = np.hstack([[2, k, (k+1) % len(theta)] for k in range(len(theta))])
-plotter.add_mesh(circle, color="gray", line_width=1.5, style="wireframe")
+    # Evitar segmentos de comprimento zero
+    if np.linalg.norm(p1 - p0) < 1e-15:
+        continue
 
-# Destacar os nós e junções da estrutura física
-plotter.add_points(points_rot, color="black", point_size=6, render_points_as_spheres=True)
+    linha = pv.Line(p0, p1)
+    raio_tubo = row["raio"] * escala_tubo
+    if raio_tubo < 1e-10:
+        raio_tubo = raio_max * 0.1 * escala_tubo  # fallback
 
-# Configurações de Câmera e Exibição
-plotter.view_xy()
-plotter.enable_parallel_projection()
+    tubo = linha.tube(radius=raio_tubo)
+    plotter.add_mesh(tubo, color="red", opacity=0.8)
+
+# Adicionar circulo do dominio
+R = np.sqrt(dados["x0"].iloc[0]**2 + dados["y0"].iloc[0]**2)
+theta = np.linspace(0, 2*np.pi, 100)
+circ_pts = np.column_stack([R*np.cos(theta), R*np.sin(theta), np.zeros(100)])
+circulo = pv.Spline(circ_pts, 100)
+plotter.add_mesh(circulo, color="blue", line_width=2)
+
+# Marcar raiz
+p_raiz = np.array([dados["x0"].iloc[0], dados["y0"].iloc[0], 0.0])
+esfera_raiz = pv.Sphere(radius=raio_max*1.5, center=p_raiz)
+plotter.add_mesh(esfera_raiz, color="green", opacity=0.9)
+
+plotter.add_title("Arvore Arterial - MiniCCO-1", font_size=12)
+plotter.show_axes()
 plotter.show()
